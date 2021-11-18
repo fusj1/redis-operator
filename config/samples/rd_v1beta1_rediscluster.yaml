@@ -1,0 +1,9 @@
+apiVersion: rd.kanzhun.com/v1beta1
+kind: RedisCluster
+metadata:
+  name: rediscluster-sample
+spec:
+  # Add fields here
+  size: 3
+  image: harbor.weizhipin.com/cloud-native/redis-operator:v5.10
+  imagePullPolocy: IfNotPresent
