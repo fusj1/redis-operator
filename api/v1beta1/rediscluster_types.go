@@ -31,11 +31,12 @@ type RedisClusterSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of RedisCluster. Edit rediscluster_types.go to remove/update
-	Size            int32                `json:"omitempty"`
-	Image           string               `json:"image"`
-	ImagePullPolicy []corev1.PullPolicy  `json:"imagePullPolicy,omitempty"`
-	Ports           []corev1.ServicePort `json:"ports,omitempty"`
-	Envs            []corev1.EnvVar      `json:"envs,omitempty"`
+	Size            *int32                      `json:"size,omitempty"`
+	Image           string                      `json:"image"`
+	Ports           []corev1.ServicePort        `json:"ports,omitempty"`
+	Envs            []corev1.EnvVar             `json:"envs,omitempty"`
+	Resources       corev1.ResourceRequirements `json:"resources,omitempty"`
+	ImagePullPolicy corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 }
 
 // RedisClusterStatus defines the observed state of RedisCluster

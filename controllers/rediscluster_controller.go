@@ -19,14 +19,16 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
-	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/fusj1/redis-operator/api/v1beta1"
 	rdv1beta1 "github.com/fusj1/redis-operator/api/v1beta1"
 	resources "github.com/fusj1/redis-operator/resources"
 )
@@ -35,7 +37,6 @@ import (
 type RedisClusterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Log    logr.Logger
 }
 
 //+kubebuilder:rbac:groups=rd.kanzhun.com,resources=redisclusters,verbs=get;list;watch;create;update;patch;delete
@@ -52,9 +53,9 @@ type RedisClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("rediscluster", req.NamespacedName)
+	log := log.FromContext(ctx)
 	var redisCluster rdv1beta1.RedisCluster
-	err := r.Get(ctx, req.NamespacedName, &rdv1beta1.RedisCluster{})
+	err := r.Get(ctx, req.NamespacedName, &redisCluster)
 	if err != nil {
 		// RedisCluster 被删除的时候 忽略
 		if client.IgnoreNotFound(err) != nil {
@@ -62,42 +63,69 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		return ctrl.Result{}, nil
 	}
-	log.Info("fetch rediscluster", "rediscluster", redisCluster)
+	log.Info("fetch rediscluster", "rediscluster================", redisCluster)
 	//   如果不存在，则创建关联资源
 	//   如果存在，判断是否需要更新
 	//   如果需要更新，则直接更新
 	//   如果不需要更新，则正常返回
-	// 关联sts
+	//   关联sts
 	sts := resources.NewStateFulSet(&redisCluster)
-	if err := r.Get(ctx, req.NamespacedName, deploy); err != nil && errors.IsNotFound(err) {
+	if err := r.Get(ctx, req.NamespacedName, sts); err != nil && errors.IsNotFound(err) {
 		// 1、关联Annotation
-		data, _ := json.Marshal(deploy.Spec)
+		data, _ := json.Marshal(sts.Spec)
 		if redisCluster.Annotations != nil {
-			redisCluster.Annotations[oldSpecAnnotation] = string(data)
+			redisCluster.Annotations["oldSpecAnnotation"] = string(data)
 		} else {
-			redisCluster.Annotations = map[string]string{
-				oldSpecAnnotation: string(data),
+			redisCluster.Annotations = map[string]string{"oldSpecAnnotation": string(data)}
 		}
 		if err := r.Client.Update(ctx, &redisCluster); err != nil {
 			return ctrl.Result{}, err
 		}
 		// 创建关联资源
 		// 1、创建statefulset
-		sts := resources.NewStateFulSet(&v1beta1.RedisCluster)
+		sts := resources.NewStateFulSet(&redisCluster)
 		if err := r.Client.Create(ctx, sts); err != nil {
 			return ctrl.Result{}, err
 		}
 		// 2、创建service资源
-		svc := resources.NewService(&v1beta1.RedisCluster)
-		if err := r.Client.Create(ctx, service); err != nil {
-			return ctrl.Result{}, nil
+		svc := resources.NewService(&redisCluster)
+		if err := r.Client.Create(ctx, svc); err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil		
 	}
+	oldSpec := rdv1beta1.RedisClusterSpec{}
+	if err := json.Unmarshal([]byte(redisCluster.Annotations["oldSpecAnnotation"]), &oldSpec); err != nil {
+		return ctrl.Result{}, err
+	}
+	// 当前规范与旧的不一致的时候需要更新
+	if !reflect.DeepEqual(redisCluster.Spec, oldSpec) {
+		newSts := resources.NewStateFulSet(&redisCluster)
+		oldSts := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, req.NamespacedName, oldSts); err != nil {
+			return ctrl.Result{}, err
+		}
+		oldSts.Spec = newSts.Spec
+		if err := r.Client.Update(ctx, oldSts); err != nil {
+			return ctrl.Result{}, err
+		}
+		newSvc := resources.NewService(&redisCluster)
+		oldSvc := &corev1.Service{}
+		if err := r.Client.Get(ctx, req.NamespacedName, oldSvc); err != nil {
+			return ctrl.Result{}, err
+		}
+		newSvc.Spec.ClusterIP = oldSvc.Spec.ClusterIP
+		oldSvc.Spec = newSvc.Spec
+		if err := r.Client.Update(ctx, oldSvc); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{}, nil
+}
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RedisClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-	    For(&rdv1beta1.RedisCluster{}).
-		Complete(r).
+		For(&rdv1beta1.RedisCluster{}).
+		Complete(r)
 }

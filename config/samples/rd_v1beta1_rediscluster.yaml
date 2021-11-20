@@ -4,6 +4,10 @@ metadata:
   name: rediscluster-sample
 spec:
   # Add fields here
-  size: 3
-  image: harbor.weizhipin.com/cloud-native/redis-operator:v5.10
-  imagePullPolocy: IfNotPresent
+  size: 2
+  image: harbor.weizhipin.com/cloud-native/redis:5.0.0-alpine
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30005  
+  
