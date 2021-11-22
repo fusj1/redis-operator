@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"reflect"
 
+	rdv1beta1 "github.com/fusj1/redis-operator/api/v1beta1"
+	resources "github.com/fusj1/redis-operator/resources"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,9 +30,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	rdv1beta1 "github.com/fusj1/redis-operator/api/v1beta1"
-	resources "github.com/fusj1/redis-operator/resources"
 )
 
 // RedisClusterReconciler reconciles a RedisCluster object
@@ -39,6 +38,8 @@ type RedisClusterReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+//+kubebuilder:rbac:groups=apps,resources=statefulset,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=service,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rd.kanzhun.com,resources=redisclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rd.kanzhun.com,resources=redisclusters/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=rd.kanzhun.com,resources=redisclusters/finalizers,verbs=update
